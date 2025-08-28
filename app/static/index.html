@@ -1,173 +1,258 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Debate Visualizer Prototype</title>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Noto Sans CJK", sans-serif; margin: 0; padding: 0; }
-    header { background: #0b7285; color: #fff; padding: 12px 20px; }
-    main { padding: 16px; max-width: 1200px; margin: 0 auto; }
-    textarea { width: 100%; height: 200px; }
-    .row { display: flex; gap: 16px; flex-wrap: wrap; }
-    .col { flex: 1; min-width: 320px; }
-    .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-    #chart { width: 100%; height: 320px; }
-    #wordcloud { width: 100%; height: 400px; border: 1px dashed #ddd; }
-    button { background: #0b7285; color: #fff; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; }
-    button:disabled { opacity: 0.6; cursor: default; }
-    footer { text-align: center; color: #666; padding: 20px; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>辩论可视化原型</h1>
-  </header>
-  <main>
-    <p>将辩论的转录内容粘贴到下面，点击分析。我们会展示关键词词云和“语义拉扯”时间序列，帮助快速理解辩论风向变化。</p>
-    <textarea id="input" placeholder="例如：\nAlice: Opening statement...\nBob: Rebuttal...\nAlice: ..."></textarea>
-    <div style="margin:10px 0;">
-      <button id="analyzeBtn">开始分析</button>
-      <span id="status"></span>
-    </div>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Debate Visualizer Prototype</title>
+        <style>
+            body {
+                font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Noto Sans CJK", sans-serif;
+                margin: 0;
+                padding: 0;
+            }
+            header {
+                background: #0b7285;
+                color: #fff;
+                padding: 12px 20px;
+            }
+            main {
+                padding: 16px;
+                max-width: 1200px;
+                margin: 0 auto;
+            }
+            textarea {
+                width: 100%;
+                height: 200px;
+            }
+            .row {
+                display: flex;
+                gap: 16px;
+                flex-wrap: wrap;
+            }
+            .col {
+                flex: 1;
+                min-width: 320px;
+            }
+            .card {
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 12px;
+                background: #fff;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            }
+            #chart {
+                width: 100%;
+                height: 320px;
+            }
+            #wordcloud {
+                width: 100%;
+                height: 400px;
+                border: 1px dashed #ddd;
+            }
+            button {
+                background: #0b7285;
+                color: #fff;
+                border: none;
+                padding: 10px 16px;
+                border-radius: 6px;
+                cursor: pointer;
+            }
+            button:disabled {
+                opacity: 0.6;
+                cursor: default;
+            }
+            footer {
+                text-align: center;
+                color: #666;
+                padding: 20px;
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>辩论可视化原型</h1>
+        </header>
+        <main>
+            <p>将辩论的转录内容粘贴到下面，点击分析。我们会展示关键词词云和“语义拉扯”时间序列，帮助快速理解辩论风向变化。</p>
+            <textarea id="input" placeholder="例如：\nAlice: Opening statement...\nBob: Rebuttal...\nAlice: ..."></textarea>
+            <div style="margin: 10px 0">
+                <button id="chineseExampleBtn" style="margin-right: 8px">使用中文示例</button>
+                <button id="englishExampleBtn" style="margin-right: 8px">使用英文示例</button>
+                <button id="analyzeBtn">开始分析</button>
+                <span id="status"></span>
+            </div>
 
-    <div class="row">
-      <div class="col">
-        <div class="card">
-          <h3>词云</h3>
-          <canvas id="wordcloud"></canvas>
-        </div>
-      </div>
-      <div class="col">
-        <div class="card">
-          <h3>语义拉扯（两位主要发言者）</h3>
-          <canvas id="chart"></canvas>
-          <div id="legend"></div>
-        </div>
-      </div>
-    </div>
-  </main>
-  <footer>
-    开源原型，仅供演示
-  </footer>
+            <div class="row">
+                <div class="col">
+                    <div class="card">
+                        <h3>词云</h3>
+                        <canvas id="wordcloud"></canvas>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="card">
+                        <h3>语义拉扯（两位主要发言者）</h3>
+                        <canvas id="chart"></canvas>
+                        <div id="legend"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        <footer>开源原型，仅供演示</footer>
 
-  <script>
-    const API_BASE = location.origin.replace(/:\d+$/, ':12000');
-    const btn = document.getElementById('analyzeBtn');
-    const input = document.getElementById('input');
-    const statusEl = document.getElementById('status');
+        <script>
+            const API_BASE = "http://localhost:12000";
+            const btn = document.getElementById("analyzeBtn");
+            const chineseBtn = document.getElementById("chineseExampleBtn");
+            const englishBtn = document.getElementById("englishExampleBtn");
+            const input = document.getElementById("input");
+            const statusEl = document.getElementById("status");
 
-    async function postAnalyze(text) {
-      const res = await fetch(API_BASE + '/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
-      if (!res.ok) throw new Error('API error: ' + res.status);
-      return res.json();
-    }
+            async function postAnalyze(text) {
+                const res = await fetch(API_BASE + "/analyze", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text }),
+                });
+                if (!res.ok) throw new Error("API error: " + res.status);
+                return res.json();
+            }
 
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      statusEl.textContent = '分析中...';
-      try {
-        const data = await postAnalyze(input.value);
-        statusEl.textContent = '完成';
-        renderWordCloud(data.top_words);
-        renderTugOfWar(data.tug_of_war);
-      } catch (e) {
-        console.error(e);
-        statusEl.textContent = '失败: ' + e.message;
-      } finally {
-        btn.disabled = false;
-      }
-    });
+            // 中文示例按钮事件
+            chineseBtn.addEventListener("click", () => {
+                const chineseText = `孔子: 君子和而不同，小人同而不和。君子周而不比，小人比而不周。
+墨子: 兼爱非攻，天下之人皆相爱，强不执弱，众不劫寡，富不侮贫，贵不敖贱，诈不欺愚。
+孔子: 仁者爱人，有礼者敬人。爱人者，人恒爱之；敬人者，人恒敬之。
+墨子: 若使天下兼相爱，国与国不相攻，家与家不相乱，盗贼无有，君臣父子皆能孝慈，若此则天下治。
+孔子: 己所不欲，勿施于人。己欲立而立人，己欲达而达人。
+墨子: 天下无大小国，皆天之邑也。人无幼长贵贱，皆天之臣也。
+孔子: 君子喻于义，小人喻于利。君子怀德，小人怀土；君子怀刑，小人怀惠。
+墨子: 故圣人以治天下为事者也，必知乱之所自起，焉能治之；不知乱之所自起，则不能治。
+孔子: 政者，正也。子帅以正，孰敢不正？
+墨子: 故古者圣王之为政，列德而尚贤，虽在农与工肆之人，有能则举之。`;
+                input.value = chineseText;
+                statusEl.textContent = "已加载中文示例";
+            });
 
-    function renderWordCloud(topWords) {
-      const canvas = document.getElementById('wordcloud');
-      const ctx = canvas.getContext('2d');
-      const w = canvas.width = canvas.clientWidth;
-      const h = canvas.height = canvas.clientHeight;
-      ctx.clearRect(0,0,w,h);
+            // 英文示例按钮事件
+            englishBtn.addEventListener("click", () => {
+                const englishText = `Lincoln: Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal.
+Douglas: The question is simply this: Shall the people of a United States Territory, like the people of a State, have the right to form and regulate their own domestic institutions in their own way?
+Lincoln: I believe this government cannot endure, permanently half slave and half free. I do not expect the Union to be dissolved -- I do not expect the house to fall -- but I do expect it will cease to be divided.
+Douglas: Let each State mind its own business and let its neighbors alone. If we will only act on that great principle, we will go on peaceably, happily and prosperously.
+Lincoln: A house divided against itself cannot stand. I believe this government cannot endure, permanently half slave and half free.
+Douglas: The great principle of self-government is at stake, and surely the people of this country are never going to decide that the principle upon which our whole republican system rests is vicious and wrong.
+Lincoln: What constitutes the bulwark of our own liberty and independence? It is not our frowning battlements, our bristling sea coasts, the guns of our war steamers, or the strength of our gallant and disciplined army.
+Douglas: The right of the people to govern themselves is the fundamental principle upon which our whole system of government rests.
+Lincoln: The ballot is stronger than the bullet.
+Douglas: Popular sovereignty is the great principle upon which our institutions rest.`;
+                input.value = englishText;
+                statusEl.textContent = "已加载英文示例";
+            });
 
-      if (!topWords || topWords.length === 0) {
-        ctx.fillStyle = '#999';
-        ctx.fillText('无数据', 20, 20);
-        return;
-      }
-      // Simple radial placement word cloud (no collisions handling for prototype)
-      const maxCount = topWords[0][1] || 1;
-      const cx = w/2, cy = h/2;
-      let angle = 0;
-      let radius = 10;
-      for (let i=0; i<Math.min(120, topWords.length); i++) {
-        const [word, count] = topWords[i];
-        const size = 10 + Math.round(30 * (count / maxCount));
-        ctx.font = `${size}px sans-serif`;
-        ctx.fillStyle = `hsl(${(i*19)%360} 70% 35%)`;
-        const x = cx + Math.cos(angle) * radius;
-        const y = cy + Math.sin(angle) * radius;
-        ctx.fillText(word, x, y);
-        angle += 0.45;
-        radius += 6;
-      }
-    }
+            btn.addEventListener("click", async () => {
+                btn.disabled = true;
+                statusEl.textContent = "分析中...";
+                try {
+                    const data = await postAnalyze(input.value);
+                    statusEl.textContent = "完成";
+                    renderWordCloud(data.top_words);
+                    renderTugOfWar(data.tug_of_war);
+                } catch (e) {
+                    console.error(e);
+                    statusEl.textContent = "失败: " + e.message;
+                } finally {
+                    btn.disabled = false;
+                }
+            });
 
-    function renderTugOfWar(series) {
-      const canvas = document.getElementById('chart');
-      const ctx = canvas.getContext('2d');
-      const w = canvas.width = canvas.clientWidth;
-      const h = canvas.height = canvas.clientHeight;
-      ctx.clearRect(0,0,w,h);
+            function renderWordCloud(topWords) {
+                const canvas = document.getElementById("wordcloud");
+                const ctx = canvas.getContext("2d");
+                const w = (canvas.width = canvas.clientWidth);
+                const h = (canvas.height = canvas.clientHeight);
+                ctx.clearRect(0, 0, w, h);
 
-      if (!series || series.length === 0) {
-        ctx.fillStyle = '#999';
-        ctx.fillText('无数据', 20, 20);
-        return;
-      }
-      const minScore = Math.min(...series.map(p=>p.score));
-      const maxScore = Math.max(...series.map(p=>p.score));
-      const pad = 30;
+                if (!topWords || topWords.length === 0) {
+                    ctx.fillStyle = "#999";
+                    ctx.fillText("无数据", 20, 20);
+                    return;
+                }
+                // Simple radial placement word cloud (no collisions handling for prototype)
+                const maxCount = topWords[0][1] || 1;
+                const cx = w / 2,
+                    cy = h / 2;
+                let angle = 0;
+                let radius = 10;
+                for (let i = 0; i < Math.min(120, topWords.length); i++) {
+                    const [word, count] = topWords[i];
+                    const size = 10 + Math.round(30 * (count / maxCount));
+                    ctx.font = `${size}px sans-serif`;
+                    ctx.fillStyle = `hsl(${(i * 19) % 360} 70% 35%)`;
+                    const x = cx + Math.cos(angle) * radius;
+                    const y = cy + Math.sin(angle) * radius;
+                    ctx.fillText(word, x, y);
+                    angle += 0.45;
+                    radius += 6;
+                }
+            }
 
-      const xScale = (i) => pad + (i / Math.max(1, series.length-1)) * (w - 2*pad);
-      const yScale = (s) => {
-        if (maxScore === minScore) return h/2;
-        return h - pad - ((s - minScore) / (maxScore - minScore)) * (h - 2*pad);
-      };
+            function renderTugOfWar(series) {
+                const canvas = document.getElementById("chart");
+                const ctx = canvas.getContext("2d");
+                const w = (canvas.width = canvas.clientWidth);
+                const h = (canvas.height = canvas.clientHeight);
+                ctx.clearRect(0, 0, w, h);
 
-      // axes
-      ctx.strokeStyle = '#ccc';
-      ctx.beginPath();
-      ctx.moveTo(pad, pad);
-      ctx.lineTo(pad, h - pad);
-      ctx.lineTo(w - pad, h - pad);
-      ctx.stroke();
+                if (!series || series.length === 0) {
+                    ctx.fillStyle = "#999";
+                    ctx.fillText("无数据", 20, 20);
+                    return;
+                }
+                const minScore = Math.min(...series.map((p) => p.score));
+                const maxScore = Math.max(...series.map((p) => p.score));
+                const pad = 30;
 
-      // zero line
-      const y0 = yScale(0);
-      ctx.strokeStyle = '#ddd';
-      ctx.beginPath();
-      ctx.moveTo(pad, y0);
-      ctx.lineTo(w - pad, y0);
-      ctx.stroke();
+                const xScale = (i) => pad + (i / Math.max(1, series.length - 1)) * (w - 2 * pad);
+                const yScale = (s) => {
+                    if (maxScore === minScore) return h / 2;
+                    return h - pad - ((s - minScore) / (maxScore - minScore)) * (h - 2 * pad);
+                };
 
-      // line
-      ctx.strokeStyle = '#0b7285';
-      ctx.beginPath();
-      for (let i=0; i<series.length; i++) {
-        const p = series[i];
-        const x = xScale(i);
-        const y = yScale(p.score);
-        if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-      }
-      ctx.stroke();
+                // axes
+                ctx.strokeStyle = "#ccc";
+                ctx.beginPath();
+                ctx.moveTo(pad, pad);
+                ctx.lineTo(pad, h - pad);
+                ctx.lineTo(w - pad, h - pad);
+                ctx.stroke();
 
-      // legend
-      const legend = document.getElementById('legend');
-      const a = series[0].speakerA || 'A';
-      const b = series[0].speakerB || 'B';
-      legend.textContent = `> 0: ${a} 主导 | < 0: ${b} 主导`;
-    }
-  </script>
-</body>
+                // zero line
+                const y0 = yScale(0);
+                ctx.strokeStyle = "#ddd";
+                ctx.beginPath();
+                ctx.moveTo(pad, y0);
+                ctx.lineTo(w - pad, y0);
+                ctx.stroke();
+
+                // line
+                ctx.strokeStyle = "#0b7285";
+                ctx.beginPath();
+                for (let i = 0; i < series.length; i++) {
+                    const p = series[i];
+                    const x = xScale(i);
+                    const y = yScale(p.score);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+
+                // legend
+                const legend = document.getElementById("legend");
+                const a = series[0].speakerA || "A";
+                const b = series[0].speakerB || "B";
+                legend.textContent = `> 0: ${a} 主导 | < 0: ${b} 主导`;
+            }
+        </script>
+    </body>
 </html>
