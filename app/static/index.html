@@ -3,7 +3,9 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Debate Visualizer Prototype</title>
+        <title>辩论分析工具</title>
+        <script src="https://d3js.org/d3.v7.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/d3-cloud@1.2.5/build/d3.layout.cloud.js"></script>
         <style>
             body {
                 font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Noto Sans CJK", sans-serif;
@@ -23,6 +25,11 @@
             textarea {
                 width: 100%;
                 height: 200px;
+                font-family: inherit;
+                padding: 12px;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                resize: vertical;
             }
             .row {
                 display: flex;
@@ -42,12 +49,13 @@
             }
             #chart {
                 width: 100%;
-                height: 320px;
+                height: 400px;
             }
             #wordcloud {
                 width: 100%;
                 height: 400px;
-                border: 1px dashed #ddd;
+                border: 1px solid #eee;
+                border-radius: 6px;
             }
             button {
                 background: #0b7285;
@@ -56,6 +64,11 @@
                 padding: 10px 16px;
                 border-radius: 6px;
                 cursor: pointer;
+                margin-right: 8px;
+                transition: background-color 0.2s;
+            }
+            button:hover {
+                background: #0a5a6b;
             }
             button:disabled {
                 opacity: 0.6;
@@ -66,6 +79,16 @@
                 color: #666;
                 padding: 20px;
             }
+            .tooltip {
+                position: absolute;
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                pointer-events: none;
+                z-index: 1000;
+            }
         </style>
     </head>
     <body>
@@ -73,11 +96,11 @@
             <h1>辩论可视化原型</h1>
         </header>
         <main>
-            <p>将辩论的转录内容粘贴到下面，点击分析。我们会展示关键词词云和“语义拉扯”时间序列，帮助快速理解辩论风向变化。</p>
+            <p>将辩论的转录内容粘贴到下面，点击分析。我们会展示关键词词云和矛盾关系分析图，帮助快速理解辩论的核心矛盾点。</p>
             <textarea id="input" placeholder="例如：\nAlice: Opening statement...\nBob: Rebuttal...\nAlice: ..."></textarea>
             <div style="margin: 10px 0">
-                <button id="chineseExampleBtn" style="margin-right: 8px">使用中文示例</button>
-                <button id="englishExampleBtn" style="margin-right: 8px">使用英文示例</button>
+                <button id="chineseExampleBtn">使用中文示例</button>
+                <button id="englishExampleBtn">使用英文示例</button>
                 <button id="analyzeBtn">开始分析</button>
                 <span id="status"></span>
             </div>
@@ -86,13 +109,13 @@
                 <div class="col">
                     <div class="card">
                         <h3>词云</h3>
-                        <canvas id="wordcloud"></canvas>
+                        <div id="wordcloud"></div>
                     </div>
                 </div>
                 <div class="col">
                     <div class="card">
-                        <h3>语义拉扯（两位主要发言者）</h3>
-                        <canvas id="chart"></canvas>
+                        <h3>矛盾关系分析</h3>
+                        <div id="chart"></div>
                         <div id="legend"></div>
                     </div>
                 </div>
@@ -157,7 +180,7 @@ Douglas: Popular sovereignty is the great principle upon which our institutions 
                     const data = await postAnalyze(input.value);
                     statusEl.textContent = "完成";
                     renderWordCloud(data.top_words);
-                    renderTugOfWar(data.tug_of_war);
+                    renderContradictionAnalysis(data.contradiction_analysis);
                 } catch (e) {
                     console.error(e);
                     statusEl.textContent = "失败: " + e.message;
@@ -167,91 +190,311 @@ Douglas: Popular sovereignty is the great principle upon which our institutions 
             });
 
             function renderWordCloud(topWords) {
-                const canvas = document.getElementById("wordcloud");
-                const ctx = canvas.getContext("2d");
-                const w = (canvas.width = canvas.clientWidth);
-                const h = (canvas.height = canvas.clientHeight);
-                ctx.clearRect(0, 0, w, h);
+                const container = document.getElementById("wordcloud");
+                container.innerHTML = "";
 
                 if (!topWords || topWords.length === 0) {
-                    ctx.fillStyle = "#999";
-                    ctx.fillText("无数据", 20, 20);
+                    container.innerHTML = '<div style="text-align: center; color: #999; padding: 100px 0;">无数据</div>';
                     return;
                 }
-                // Simple radial placement word cloud (no collisions handling for prototype)
-                const maxCount = topWords[0][1] || 1;
-                const cx = w / 2,
-                    cy = h / 2;
-                let angle = 0;
-                let radius = 10;
-                for (let i = 0; i < Math.min(120, topWords.length); i++) {
-                    const [word, count] = topWords[i];
-                    const size = 10 + Math.round(30 * (count / maxCount));
-                    ctx.font = `${size}px sans-serif`;
-                    ctx.fillStyle = `hsl(${(i * 19) % 360} 70% 35%)`;
-                    const x = cx + Math.cos(angle) * radius;
-                    const y = cy + Math.sin(angle) * radius;
-                    ctx.fillText(word, x, y);
-                    angle += 0.45;
-                    radius += 6;
+
+                // 准备数据
+                const data = topWords.slice(0, 50).map(([word, count], i) => ({
+                    text: word,
+                    size: Math.max(12, Math.min(60, 12 + (count / topWords[0][1]) * 48)),
+                    color: `hsl(${(i * 137.5) % 360}, 70%, 50%)`,
+                }));
+
+                // 创建SVG
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                const svg = d3.select(container).append("svg").attr("width", width).attr("height", height);
+
+                // 创建词云布局
+                const layout = d3.layout
+                    .cloud()
+                    .size([width, height])
+                    .words(data)
+                    .padding(2)
+                    .rotate(() => ~~(Math.random() * 2) * 90)
+                    .fontSize((d) => d.size)
+                    .on("end", draw);
+
+                layout.start();
+
+                function draw(words) {
+                    svg.selectAll("text")
+                        .data(words)
+                        .enter()
+                        .append("text")
+                        .style("font-size", (d) => d.size + "px")
+                        .style("font-family", "Impact")
+                        .style("fill", (d) => d.color)
+                        .attr("text-anchor", "middle")
+                        .attr("transform", (d) => "translate(" + [d.x + width / 2, d.y + height / 2] + ")rotate(" + d.rotate + ")")
+                        .text((d) => d.text);
                 }
             }
 
-            function renderTugOfWar(series) {
-                const canvas = document.getElementById("chart");
-                const ctx = canvas.getContext("2d");
-                const w = (canvas.width = canvas.clientWidth);
-                const h = (canvas.height = canvas.clientHeight);
-                ctx.clearRect(0, 0, w, h);
+            function renderContradictionAnalysis(series) {
+                console.log("Rendering contradiction analysis"); // Log to verify function execution
+                console.log("Series data:", series); // Log series data to verify input
+
+                // Reorder series by speaker
+                series.sort((a, b) => a.speaker.localeCompare(b.speaker) || a.index - b.index);
+                console.log("Reordered series data:", series); // Log reordered data
+
+                const container = document.getElementById("chart");
+                container.innerHTML = "";
 
                 if (!series || series.length === 0) {
-                    ctx.fillStyle = "#999";
-                    ctx.fillText("无数据", 20, 20);
+                    container.innerHTML = '<div style="text-align: center; color: #999; padding: 100px 0;">无数据</div>';
                     return;
                 }
-                const minScore = Math.min(...series.map((p) => p.score));
-                const maxScore = Math.max(...series.map((p) => p.score));
-                const pad = 30;
 
-                const xScale = (i) => pad + (i / Math.max(1, series.length - 1)) * (w - 2 * pad);
-                const yScale = (s) => {
-                    if (maxScore === minScore) return h / 2;
-                    return h - pad - ((s - minScore) / (maxScore - minScore)) * (h - 2 * pad);
-                };
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                const margin = { top: 20, right: 20, bottom: 80, left: 80 };
 
-                // axes
-                ctx.strokeStyle = "#ccc";
-                ctx.beginPath();
-                ctx.moveTo(pad, pad);
-                ctx.lineTo(pad, h - pad);
-                ctx.lineTo(w - pad, h - pad);
-                ctx.stroke();
+                // 创建SVG
+                const svg = d3.select(container).append("svg").attr("width", width).attr("height", height);
 
-                // zero line
-                const y0 = yScale(0);
-                ctx.strokeStyle = "#ddd";
-                ctx.beginPath();
-                ctx.moveTo(pad, y0);
-                ctx.lineTo(w - pad, y0);
-                ctx.stroke();
+                // 创建比例尺：-1到+1
+                const xScale = d3
+                    .scaleLinear()
+                    .domain([-1, 1])
+                    .range([margin.left, width - margin.right]);
 
-                // line
-                ctx.strokeStyle = "#0b7285";
-                ctx.beginPath();
-                for (let i = 0; i < series.length; i++) {
-                    const p = series[i];
-                    const x = xScale(i);
-                    const y = yScale(p.score);
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.stroke();
+                const yScale = d3
+                    .scaleLinear()
+                    .domain([-1, 1])
+                    .range([height - margin.bottom, margin.top]);
 
-                // legend
+                // 添加坐标轴
+                const xAxis = d3.axisBottom(xScale).ticks(5);
+                const yAxis = d3.axisLeft(yScale).ticks(5);
+
+                svg.append("g")
+                    .attr("transform", `translate(0,${height - margin.bottom})`)
+                    .call(xAxis);
+
+                svg.append("g").attr("transform", `translate(${margin.left},0)`).call(yAxis);
+
+                // 添加中心线（0线）
+                svg.append("line")
+                    .attr("x1", margin.left)
+                    .attr("y1", yScale(0))
+                    .attr("x2", width - margin.right)
+                    .attr("y2", yScale(0))
+                    .attr("stroke", "#ccc")
+                    .attr("stroke-width", 1)
+                    .attr("stroke-dasharray", "3,3");
+
+                svg.append("line")
+                    .attr("x1", xScale(0))
+                    .attr("y1", margin.top)
+                    .attr("x2", xScale(0))
+                    .attr("y2", height - margin.bottom)
+                    .attr("stroke", "#ccc")
+                    .attr("stroke-width", 1)
+                    .attr("stroke-dasharray", "3,3");
+
+                // 添加象限标签
+                svg.append("text")
+                    .attr("x", margin.left + 20)
+                    .attr("y", margin.top + 20)
+                    .attr("font-size", "12px")
+                    .attr("fill", "#999")
+                    .text("II");
+
+                svg.append("text")
+                    .attr("x", width - margin.right - 20)
+                    .attr("y", margin.top + 20)
+                    .attr("font-size", "12px")
+                    .attr("fill", "#999")
+                    .text("I");
+
+                svg.append("text")
+                    .attr("x", margin.left + 20)
+                    .attr("y", height - margin.bottom - 20)
+                    .attr("font-size", "12px")
+                    .attr("fill", "#999")
+                    .text("III");
+
+                svg.append("text")
+                    .attr("x", width - margin.right - 20)
+                    .attr("y", height - margin.bottom - 20)
+                    .attr("font-size", "12px")
+                    .attr("fill", "#999")
+                    .text("IV");
+
+                // 添加坐标轴标签
+                const xAxisLabels = series[0].x_axis;
+                const yAxisLabels = series[0].y_axis;
+
+                // X轴标签（左负右正）
+                svg.append("text")
+                    .attr("x", margin.left - 10)
+                    .attr("y", height - margin.bottom + 30)
+                    .attr("text-anchor", "end")
+                    .style("font-size", "11px")
+                    .style("fill", "#666")
+                    .text(xAxisLabels[0]);
+
+                svg.append("text")
+                    .attr("x", width - margin.right + 10)
+                    .attr("y", height - margin.bottom + 30)
+                    .attr("text-anchor", "start")
+                    .style("font-size", "11px")
+                    .style("fill", "#666")
+                    .text(xAxisLabels[1]);
+
+                // Y轴标签（下负上正）
+                svg.append("text")
+                    .attr("transform", "rotate(-90)")
+                    .attr("x", -height / 2 - 10)
+                    .attr("y", margin.left - 30)
+                    .attr("text-anchor", "middle")
+                    .style("font-size", "11px")
+                    .style("fill", "#666")
+                    .text(yAxisLabels[0]);
+
+                svg.append("text")
+                    .attr("transform", "rotate(-90)")
+                    .attr("x", -height / 2 + 10)
+                    .attr("y", margin.left - 30)
+                    .attr("text-anchor", "middle")
+                    .style("font-size", "11px")
+                    .style("fill", "#666")
+                    .text(yAxisLabels[1]);
+
+                // 添加网格线
+                svg.append("g")
+                    .attr("class", "grid")
+                    .attr("transform", `translate(0,${height - margin.bottom})`)
+                    .call(
+                        d3
+                            .axisBottom(xScale)
+                            .tickSize(-height + margin.top + margin.bottom)
+                            .tickFormat("")
+                    );
+
+                svg.append("g")
+                    .attr("class", "grid")
+                    .attr("transform", `translate(${margin.left},0)`)
+                    .call(
+                        d3
+                            .axisLeft(yScale)
+                            .tickSize(-width + margin.left + margin.right)
+                            .tickFormat("")
+                    );
+
+                // 添加数据点
+                const speakerColors = {};
+                let colorIndex = 0;
+                const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+                // Assign colors to speakers
+                series.forEach((d) => {
+                    if (!speakerColors[d.speaker]) {
+                        speakerColors[d.speaker] = colorScale(colorIndex);
+                        colorIndex += 1;
+                    }
+                });
+
+                const points = svg
+                    .selectAll(".point")
+                    .data(series)
+                    .enter()
+                    .append("circle")
+                    .attr("class", "point")
+                    .attr("cx", (d) => xScale(d.x))
+                    .attr("cy", (d) => yScale(d.y))
+                    .attr("r", 6)
+                    .attr("fill", (d) => speakerColors[d.speaker])
+                    .attr("stroke", "#fff")
+                    .attr("stroke-width", 2)
+                    .style("cursor", "pointer");
+
+                // Define arrow markers for each speaker
+                const defs = svg.append("defs");
+                Object.keys(speakerColors).forEach((speaker) => {
+                    defs.append("marker")
+                        .attr("id", `arrow-${speaker}`)
+                        .attr("viewBox", "0 -5 10 10")
+                        .attr("refX", 10)
+                        .attr("refY", 0)
+                        .attr("markerWidth", 6)
+                        .attr("markerHeight", 6)
+                        .attr("orient", "auto")
+                        .append("path")
+                        .attr("d", "M0,-5L10,0L0,5")
+                        .attr("fill", speakerColors[speaker]);
+                });
+
+                // Connect points with arrows
+                series.forEach((d, i) => {
+                    console.log(`Processing index ${i}, speaker: ${d.speaker}`);
+                    if (i > 0 && series[i - 1].speaker === d.speaker) {
+                        console.log(`Drawing line from (${series[i - 1].x}, ${series[i - 1].y}) to (${d.x}, ${d.y}) with marker`);
+                        svg.append("line")
+                            .attr("x1", xScale(series[i - 1].x))
+                            .attr("y1", yScale(series[i - 1].y))
+                            .attr("x2", xScale(d.x))
+                            .attr("y2", yScale(d.y))
+                            .attr("stroke", speakerColors[d.speaker])
+                            .attr("stroke-width", 2)
+                            .attr("marker-end", `url(#arrow-${d.speaker})`)
+                            .each(function () {
+                                console.log("Line created:", this);
+                            });
+                    }
+                });
+
+                // 添加标签
+                svg.selectAll(".label")
+                    .data(series)
+                    .enter()
+                    .append("text")
+                    .attr("class", "label")
+                    .attr("x", (d) => xScale(d.x) + 8)
+                    .attr("y", (d) => yScale(d.y) - 8)
+                    .attr("font-size", "10px")
+                    .attr("fill", "#666")
+                    .text((d) => d.speaker);
+
+                // 添加图例
                 const legend = document.getElementById("legend");
-                const a = series[0].speakerA || "A";
-                const b = series[0].speakerB || "B";
-                legend.textContent = `> 0: ${a} 主导 | < 0: ${b} 主导`;
+                legend.innerHTML = `
+                    <div style="margin-top: 10px; text-align: center;">
+                        <strong>四象限矛盾关系分析：</strong><br>
+                        <strong>X轴：</strong>${xAxisLabels[0]} (负值) ↔ ${xAxisLabels[1]} (正值)<br>
+                        <strong>Y轴：</strong>${yAxisLabels[0]} (负值) ↔ ${yAxisLabels[1]} (正值)<br>
+                        <small>每个点代表一轮对话，连线显示辩论进程</small><br>
+                        <small>中心点(0,0)表示中性立场</small>
+                    </div>
+                `;
+
+                // 添加交互式提示
+                const tooltip = d3.select("body").append("div").attr("class", "tooltip").style("opacity", 0);
+
+                points
+                    .on("mouseover", function (event, d) {
+                        tooltip.transition().duration(200).style("opacity", 0.9);
+                        tooltip
+                            .html(
+                                `
+                        <strong>${d.speaker}</strong><br/>
+                        位置: (${d.x.toFixed(2)}, ${d.y.toFixed(2)})<br/>
+                        内容: ${d.text}
+                    `
+                            )
+                            .style("left", event.pageX + 10 + "px")
+                            .style("top", event.pageY - 28 + "px");
+                    })
+                    .on("mouseout", function (d) {
+                        tooltip.transition().duration(500).style("opacity", 0);
+                    });
             }
         </script>
     </body>
